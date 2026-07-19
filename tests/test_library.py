@@ -51,7 +51,8 @@ def test_extract_urls():
 def test_categories(tmp_path):
     lib = make_lib(tmp_path)
     lib.readme.write_text(
-        "# T\n## Quick Navigation by Topic\n## Neck stuff\n## Library Stats\n## Created / Updated\n",
+        "# T\n## Quick Navigation by Topic\n## Neck stuff\n"
+        "## Library Stats\n## Created / Updated\n",
         encoding="utf-8")
     assert lib.categories() == ["Neck stuff"]
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 _model = None
 _model_name = None
@@ -21,8 +20,8 @@ def get_model(name: str = "small.en"):
 def transcribe_file(
     audio_path: Path,
     model_name: str = "small.en",
-    language: Optional[str] = None,
-) -> Tuple[List[dict], float]:
+    language: str | None = None,
+) -> tuple[list[dict], float]:
     """Returns ([{start, end, text}, ...], duration_seconds).
 
     Empty segment list ⇒ no speech detected (music-only / silent reel).
@@ -36,7 +35,7 @@ def transcribe_file(
     return out, float(info.duration)
 
 
-def write_transcript(path: Path, segments: List[dict], duration: float) -> None:
+def write_transcript(path: Path, segments: list[dict], duration: float) -> None:
     """Same on-disk format as the manual pipeline this tool replaces."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:

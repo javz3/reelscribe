@@ -72,7 +72,6 @@ def test_duplicate_skipped(lib, mocked):
 
 def test_batch_continues_after_error(lib, mocked, monkeypatch):
     calls = {"n": 0}
-    real_fetch = pipeline.fetch_metadata
 
     def flaky(url, cookies_from_browser=None):
         calls["n"] += 1

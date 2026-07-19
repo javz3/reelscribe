@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import queue
 import threading
-from typing import List
 
 from .library import Library, extract_urls
 from .pipeline import ReelResult, process_batch
@@ -19,14 +18,14 @@ class JobRunner:
     def __init__(self, lib: Library, cfg: dict):
         self.lib = lib
         self.cfg = cfg
-        self.results: List[ReelResult] = []
-        self.log: List[str] = []
+        self.results: list[ReelResult] = []
+        self.log: list[str] = []
         self.busy = False
-        self._q: "queue.Queue[List[str]]" = queue.Queue()
+        self._q: queue.Queue[list[str]] = queue.Queue()
         self._lock = threading.Lock()
         threading.Thread(target=self._worker, daemon=True).start()
 
-    def submit(self, urls: List[str]) -> int:
+    def submit(self, urls: list[str]) -> int:
         with self._lock:
             new = [ReelResult(url=u) for u in urls
                    if u not in {r.url for r in self.results if r.status != "error"}]

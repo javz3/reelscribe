@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import List
 
 from .library import Library
 
@@ -48,7 +47,7 @@ For each reel in `ENRICH-BUNDLE.json`:
 """
 
 
-def collect_pending(lib: Library) -> List[dict]:
+def collect_pending(lib: Library) -> list[dict]:
     pending = []
     if not lib.enrich_dir.is_dir():
         return pending
@@ -90,7 +89,10 @@ def build_bundle(lib: Library, out_dir: Path = None) -> Path:
         encoding="utf-8")
 
     cats = lib.categories()
-    taxonomy = "\n".join(f"- {c}" for c in cats) if cats else "(no README found — propose a taxonomy)"
+    if cats:
+        taxonomy = "\n".join(f"- {c}" for c in cats)
+    else:
+        taxonomy = "(no README found — propose a taxonomy)"
     (out / "ENRICH-PROMPT.md").write_text(
         PROMPT_TEMPLATE.format(ts=time.strftime("%Y-%m-%d %H:%M:%S"),
                                root=lib.root, count=len(reels), taxonomy=taxonomy),

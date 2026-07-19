@@ -37,3 +37,17 @@ Homepage = "https://github.com/javz3/reelscribe"
 
 [tool.setuptools.packages.find]
 include = ["reelscribe*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4"]
+ignore = ["E731"]  # lambda-as-def used deliberately in library.stats
+
+[tool.ruff.lint.per-file-ignores]
+"reelscribe/webapp.py" = ["E501"]  # embedded single-page HTML/JS template
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

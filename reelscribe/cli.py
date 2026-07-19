@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from . import __version__, config
-from .library import Library, extract_urls, dedupe
+from .library import Library, dedupe, extract_urls
 
 
 def _resolve_library(args) -> Library:
@@ -105,6 +105,7 @@ def cmd_config(args) -> int:
 def cmd_serve(args) -> int:
     try:
         import uvicorn
+
         from .webapp import create_app
     except ImportError:
         sys.exit("Web UI needs the extras:  pip install 'reelscribe[web]'")

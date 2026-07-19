@@ -26,8 +26,8 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List, Optional
 
 NUM_RE = re.compile(r"^(\d{2,4})_")
 VIDEO_EXTS = {".mp4", ".webm", ".mkv", ".mov"}
@@ -80,7 +80,7 @@ class Library:
             p.mkdir(parents=True, exist_ok=True)
 
     # -- numbering & dedup ---------------------------------------------------
-    def _numbers_in(self, folder: Path, exts: Optional[set] = None) -> List[int]:
+    def _numbers_in(self, folder: Path, exts: set | None = None) -> list[int]:
         if not folder.is_dir():
             return []
         nums = []
@@ -105,7 +105,7 @@ class Library:
                     return max(len(m.group(1)), 2)
         return 3
 
-    def find_by_video_id(self, video_id: str) -> Optional[Path]:
+    def find_by_video_id(self, video_id: str) -> Path | None:
         """Return an existing video file whose name embeds this platform video id."""
         if not self.videos.is_dir():
             return None
@@ -132,7 +132,7 @@ class Library:
         }
 
     # -- README taxonomy -------------------------------------------------------
-    def categories(self) -> List[str]:
+    def categories(self) -> list[str]:
         """Parse '## Section' headings out of the library README (the taxonomy)."""
         if not self.readme.exists():
             return []
@@ -172,7 +172,7 @@ def slugify(text: str, max_words: int = 7) -> str:
     return "_".join(kept) or "untitled"
 
 
-def extract_urls(text: str) -> List[str]:
+def extract_urls(text: str) -> list[str]:
     """Pull http(s) URLs out of arbitrary text (batch files, markdown lists)."""
     urls = re.findall(r"https?://[^\s\)\]\">,]+", text)
     seen, out = set(), []
@@ -184,7 +184,7 @@ def extract_urls(text: str) -> List[str]:
     return out
 
 
-def dedupe(urls: Iterable[str]) -> List[str]:
+def dedupe(urls: Iterable[str]) -> list[str]:
     seen, out = set(), []
     for u in urls:
         if u not in seen:

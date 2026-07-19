@@ -14,7 +14,7 @@ import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable
 
 from . import docgen, transcribe
 from .library import Library, safe_component, slugify
@@ -25,7 +25,7 @@ STAGES = ["metadata", "video", "audio", "thumbnail", "transcript", "document"]
 @dataclass
 class ReelResult:
     url: str
-    number: Optional[int] = None
+    number: int | None = None
     video_id: str = ""
     uploader: str = ""
     title: str = ""
@@ -53,7 +53,7 @@ def _null_sink(result: ReelResult, message: str) -> None:  # pragma: no cover
     pass
 
 
-def _ydl_opts(base: dict, cookies_from_browser: Optional[str]) -> dict:
+def _ydl_opts(base: dict, cookies_from_browser: str | None) -> dict:
     opts = {"quiet": True, "no_warnings": True, "noprogress": True}
     opts.update(base)
     if cookies_from_browser:
@@ -61,7 +61,7 @@ def _ydl_opts(base: dict, cookies_from_browser: Optional[str]) -> dict:
     return opts
 
 
-def fetch_metadata(url: str, cookies_from_browser: Optional[str] = None) -> dict:
+def fetch_metadata(url: str, cookies_from_browser: str | None = None) -> dict:
     import yt_dlp
     with yt_dlp.YoutubeDL(_ydl_opts({"skip_download": True}, cookies_from_browser)) as ydl:
         info = ydl.extract_info(url, download=False)
@@ -70,8 +70,8 @@ def fetch_metadata(url: str, cookies_from_browser: Optional[str] = None) -> dict
     return ydl.sanitize_info(info) if hasattr(ydl, "sanitize_info") else info
 
 
-def _download(url: str, outtmpl: str, fmt: Optional[str],
-              cookies_from_browser: Optional[str]) -> Path:
+def _download(url: str, outtmpl: str, fmt: str | None,
+              cookies_from_browser: str | None) -> Path:
     import yt_dlp
     base = {"outtmpl": outtmpl}
     if fmt:
@@ -87,10 +87,10 @@ def process_url(
     url: str,
     lib: Library,
     whisper_model: str = "small.en",
-    language: Optional[str] = None,
-    cookies_from_browser: Optional[str] = None,
+    language: str | None = None,
+    cookies_from_browser: str | None = None,
     sink: ProgressSink = _null_sink,
-    result: Optional[ReelResult] = None,
+    result: ReelResult | None = None,
 ) -> ReelResult:
     r = result or ReelResult(url=url)
     r.status = "running"
@@ -192,14 +192,14 @@ def process_url(
 
 
 def process_batch(
-    urls: List[str],
+    urls: list[str],
     lib: Library,
     whisper_model: str = "small.en",
-    language: Optional[str] = None,
-    cookies_from_browser: Optional[str] = None,
+    language: str | None = None,
+    cookies_from_browser: str | None = None,
     sink: ProgressSink = _null_sink,
-    results: Optional[List[ReelResult]] = None,
-) -> List[ReelResult]:
+    results: list[ReelResult] | None = None,
+) -> list[ReelResult]:
     """Sequential batch — deliberate: library numbering must be serial, and
     Whisper keeps one model in memory."""
     out = results if results is not None else [ReelResult(url=u) for u in urls]
