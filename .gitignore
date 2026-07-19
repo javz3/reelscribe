@@ -12,3 +12,4 @@ venv/
 *.webm
 *.jpg
 test-library/
+uv.lock
