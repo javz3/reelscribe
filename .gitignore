@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.reelscribe.json
+*.mp4
+*.m4a
+*.webm
+*.jpg
+test-library/
