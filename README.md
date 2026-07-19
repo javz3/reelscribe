@@ -89,11 +89,31 @@ explicit **Audio Note** so nobody mistakes a lyrics fragment for instructions.
 
 ## Stage 2: enrichment
 
-`reelscribe bundle` writes `ENRICH-BUNDLE.json` (all pending reels with full
-transcripts + captions) and `ENRICH-PROMPT.md` (instructions + your README's
-taxonomy). Hand both to your LLM of choice — e.g. open the library in Claude
-Code and say *"process the reelscribe bundle"*. Direct Claude-API enrichment is
-planned for v2.
+Two ways to run the judgment pass:
+
+**A. Hand off (`reelscribe bundle`)** — writes `ENRICH-BUNDLE.json` (all pending
+reels with full transcripts + captions) and `ENRICH-PROMPT.md` (instructions +
+your README's taxonomy). Hand both to your LLM of choice — e.g. open the library
+in Claude Code and say *"process the reelscribe bundle"*.
+
+**B. Built-in (`reelscribe enrich`)** — calls the Claude API directly, one
+request per pending reel:
+
+```bash
+pip install 'reelscribe[llm]'
+export ANTHROPIC_API_KEY=sk-ant-...   # or `ant auth login`
+reelscribe enrich                      # all pending
+reelscribe enrich --limit 3            # try a few first
+reelscribe enrich --model claude-sonnet-5   # cheaper model if you prefer
+```
+
+Per reel it produces the finished doc (grounded in the transcript/caption — the
+prompt forbids inventing protocol details), a category placement from your
+taxonomy, a rare-by-design ⭐ verdict, and an index-row hook. Finished docs
+replace the drafts in place; **your README is never edited** — suggested table
+rows land in `.reelscribe/enrich/ENRICH-REPORT.md` for you to review and paste.
+Uses structured outputs (JSON schema-validated), adaptive thinking, and prompt
+caching on the shared system prompt. Default model: `claude-opus-4-8`.
 
 ## Options
 
@@ -104,9 +124,10 @@ planned for v2.
 | `--language XX` | force transcript language (e.g. `ko`, `ur`) |
 | `--cookies-from-browser B` | read login cookies from chrome/firefox/edge (Instagram, TikTok) |
 
-## Roadmap (v2)
+## Roadmap
 
-- Built-in Claude API enrichment step (opt-in, bring your own key)
+- ~~Built-in Claude API enrichment step~~ ✅ v2 (`reelscribe enrich`)
+- Cross-reference pass: give the enricher sight of related existing docs
 - Embedding-based "related clips" suggestions
 - Per-platform test fixtures for TikTok / Instagram / X
 - Watch-folder / clipboard monitor mode

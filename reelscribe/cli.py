@@ -88,6 +88,13 @@ def cmd_bundle(args) -> int:
     return 0
 
 
+def cmd_enrich(args) -> int:
+    from .llm import DEFAULT_MODEL, run_enrichment
+    lib = _resolve_library(args)
+    count = run_enrichment(lib, model=args.model or DEFAULT_MODEL, limit=args.limit or 0)
+    return 0 if count or args.limit == 0 else 0
+
+
 def cmd_config(args) -> int:
     if args.library:
         config.set_value("library", str(Path(args.library).expanduser().resolve()))
@@ -154,6 +161,13 @@ def main(argv=None) -> int:
     p.add_argument("--out", help="output folder (default: <library>/.reelscribe/enrich/bundle)")
     _add_common(p)
     p.set_defaults(func=cmd_bundle)
+
+    p = sub.add_parser("enrich", help="finalise pending drafts via the Claude API "
+                       "(needs 'reelscribe[llm]' + an Anthropic credential)")
+    p.add_argument("--model", help="Claude model ID (default: claude-opus-4-8)")
+    p.add_argument("--limit", type=int, help="enrich at most N reels")
+    _add_common(p)
+    p.set_defaults(func=cmd_enrich)
 
     p = sub.add_parser("config", help="show or set configuration")
     p.add_argument("--library", help="set the default library root")
