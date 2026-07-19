@@ -28,4 +28,5 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # setup-uv with python-version already provisions and activates a venv
       - run: uv pip install -e '.[web,dev]'
-      - run: uv run python -m pytest tests/ -q
+      # --no-project: test the env we just installed, don't re-resolve deps
+      - run: uv run --no-project python -m pytest tests/ -q
