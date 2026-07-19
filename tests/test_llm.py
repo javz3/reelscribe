@@ -111,3 +111,67 @@ def test_example_docs_skips_drafts(lib):
     examples = llm._example_docs(lib)
     assert "Finished doc" in examples
     assert "RAW DRAFT" not in examples
+
+
+# --- claude-cli engine ------------------------------------------------------
+
+def test_extract_json_variants():
+    assert llm._extract_json('{"a": 1}') == {"a": 1}
+    assert llm._extract_json('```json\n{"a": 1}\n```') == {"a": 1}
+    assert llm._extract_json('Here you go:\n{"a": {"b": 2}}\nDone.') == {"a": {"b": 2}}
+    with pytest.raises(json.JSONDecodeError):
+        llm._extract_json("no json here")
+
+
+def test_enrich_reel_cli(lib, monkeypatch):
+    calls = {}
+
+    def fake_run(cmd, **kwargs):
+        calls["cmd"] = cmd
+        calls["input"] = kwargs.get("input", "")
+        envelope = {"type": "result", "result": json.dumps(RESULT)}
+        return SimpleNamespace(stdout=json.dumps(envelope), stderr="", returncode=0)
+
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    rec = json.loads((lib.enrich_dir / "001.json").read_text())
+    result = llm.enrich_reel_cli(lib, rec, "SYSTEM", model="sonnet")
+    assert result["title"] == RESULT["title"]
+    assert calls["cmd"][:3] == ["claude", "-p", "--output-format"]
+    assert "--model" in calls["cmd"] and "sonnet" in calls["cmd"]
+    assert "push gently" in calls["input"]  # transcript reaches the prompt
+
+
+def test_enrich_reel_cli_missing_binary(lib, monkeypatch):
+    def raise_fnf(*a, **k):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(llm.subprocess, "run", raise_fnf)
+    rec = json.loads((lib.enrich_dir / "001.json").read_text())
+    with pytest.raises(RuntimeError, match="not found"):
+        llm.enrich_reel_cli(lib, rec, "SYSTEM")
+
+
+def test_enrich_reel_cli_missing_keys(lib, monkeypatch):
+    def fake_run(cmd, **kwargs):
+        return SimpleNamespace(stdout=json.dumps({"result": '{"title": "only"}'}),
+                               stderr="", returncode=0)
+
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    rec = json.loads((lib.enrich_dir / "001.json").read_text())
+    with pytest.raises(RuntimeError, match="missing keys"):
+        llm.enrich_reel_cli(lib, rec, "SYSTEM")
+
+
+def test_run_enrichment_cli_engine(lib, monkeypatch):
+    def fake_run(cmd, **kwargs):
+        return SimpleNamespace(stdout=json.dumps({"result": json.dumps(RESULT)}),
+                               stderr="", returncode=0)
+
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    logs = []
+    count = llm.run_enrichment(lib, engine="claude-cli", log=logs.append)
+    assert count == 1
+    assert any("subscription" in ln for ln in logs)
+    updated = json.loads((lib.enrich_dir / "001.json").read_text())
+    assert updated["enriched"] is True
+    assert updated["enrichment"]["model"] == "claude-code-cli"

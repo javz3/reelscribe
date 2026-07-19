@@ -89,10 +89,10 @@ def cmd_bundle(args) -> int:
 
 
 def cmd_enrich(args) -> int:
-    from .llm import DEFAULT_MODEL, run_enrichment
+    from .llm import run_enrichment
     lib = _resolve_library(args)
-    count = run_enrichment(lib, model=args.model or DEFAULT_MODEL, limit=args.limit or 0)
-    return 0 if count or args.limit == 0 else 0
+    run_enrichment(lib, model=args.model, limit=args.limit or 0, engine=args.engine)
+    return 0
 
 
 def cmd_config(args) -> int:
@@ -162,9 +162,13 @@ def main(argv=None) -> int:
     _add_common(p)
     p.set_defaults(func=cmd_bundle)
 
-    p = sub.add_parser("enrich", help="finalise pending drafts via the Claude API "
-                       "(needs 'reelscribe[llm]' + an Anthropic credential)")
-    p.add_argument("--model", help="Claude model ID (default: claude-opus-4-8)")
+    p = sub.add_parser("enrich", help="finalise pending drafts with Claude — via your "
+                       "Claude Code subscription login (--engine claude-cli) or the API")
+    p.add_argument("--engine", choices=["api", "claude-cli"], default="api",
+                   help="api = Anthropic SDK (API key/Console); "
+                        "claude-cli = Claude Code headless mode (subscription login)")
+    p.add_argument("--model", help="model override (API: model ID, default claude-opus-4-8; "
+                                   "claude-cli: e.g. 'opus'/'sonnet', default = CLI default)")
     p.add_argument("--limit", type=int, help="enrich at most N reels")
     _add_common(p)
     p.set_defaults(func=cmd_enrich)

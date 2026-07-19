@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import subprocess
 import time
 from pathlib import Path
 
@@ -161,6 +162,67 @@ def enrich_reel(client, lib: Library, rec: dict, system_prompt: str,
     return result
 
 
+def _extract_json(text: str) -> dict:
+    """Parse a JSON object out of model text (tolerates code fences / prose)."""
+    text = text.strip()
+    if text.startswith("{"):
+        return json.loads(text)
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        raise json.JSONDecodeError("no JSON object found", text[:80], 0)
+    return json.loads(text[start:end + 1])
+
+
+def enrich_reel_cli(lib: Library, rec: dict, system_prompt: str,
+                    model: str | None = None, claude_bin: str = "claude",
+                    timeout: int = 600) -> dict:
+    """Enrich one reel via Claude Code headless mode (`claude -p`).
+
+    Uses the machine's existing Claude Code login — a claude.ai subscription
+    works; no API key or Console account needed. Requires the `claude` CLI
+    installed and authenticated (https://claude.com/claude-code).
+    """
+    prompt = (
+        f"{system_prompt}\n\n"
+        f"{build_user_prompt(lib, rec)}\n\n"
+        "Respond with ONLY a single JSON object (no prose, no code fences) with exactly "
+        "these keys:\n"
+        f"{json.dumps(RESULT_SCHEMA['properties'], indent=1)}\n"
+        f"All of {RESULT_SCHEMA['required']} are required. `doc_markdown` must be the "
+        "complete final document."
+    )
+    cmd = [claude_bin, "-p", "--output-format", "json"]
+    if model:
+        cmd += ["--model", model]
+    try:
+        proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
+                              timeout=timeout, check=True)
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"`{claude_bin}` CLI not found — install Claude Code and run `claude` "
+            "once to log in (subscription auth)."
+        ) from None
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"claude CLI failed: {(e.stderr or e.stdout or '').strip()[:300]}"
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"claude CLI timed out after {timeout}s") from None
+
+    # --output-format json wraps the reply in an envelope with a `result` field
+    try:
+        envelope = json.loads(proc.stdout)
+        reply = envelope.get("result", proc.stdout) if isinstance(envelope, dict) else proc.stdout
+    except json.JSONDecodeError:
+        reply = proc.stdout
+    result = _extract_json(reply)
+    missing = [k for k in RESULT_SCHEMA["required"] if k not in result]
+    if missing:
+        raise RuntimeError(f"claude CLI reply missing keys: {missing}")
+    result["_usage"] = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0}
+    return result
+
+
 def apply_result(lib: Library, rec: dict, result: dict) -> Path:
     """Write the final doc over the draft and mark the reel enriched."""
     doc_name = rec.get("files", {}).get("document")
@@ -222,15 +284,24 @@ def write_report(lib: Library, entries: list[dict]) -> Path:
     return out
 
 
-def run_enrichment(lib: Library, model: str = DEFAULT_MODEL, limit: int = 0,
-                   log=print) -> int:
-    """CLI entry: enrich all pending reels. Returns count enriched."""
-    try:
-        import anthropic
-    except ImportError:
-        raise SystemExit(
-            "The enrich command needs the Anthropic SDK:  pip install 'reelscribe[llm]'"
-        ) from None
+def run_enrichment(lib: Library, model: str | None = None, limit: int = 0,
+                   engine: str = "api", log=print) -> int:
+    """CLI entry: enrich all pending reels. Returns count enriched.
+
+    engine="api"        → Anthropic SDK (needs 'reelscribe[llm]' + API credential)
+    engine="claude-cli" → Claude Code headless mode (uses your claude.ai
+                          subscription login; needs the `claude` CLI installed)
+    """
+    anthropic = None
+    if engine == "api":
+        try:
+            import anthropic
+        except ImportError:
+            raise SystemExit(
+                "The API engine needs the Anthropic SDK:  pip install 'reelscribe[llm]'\n"
+                "No API access? Use your Claude subscription:  reelscribe enrich "
+                "--engine claude-cli"
+            ) from None
 
     pending = collect_pending(lib)
     if limit:
@@ -239,29 +310,39 @@ def run_enrichment(lib: Library, model: str = DEFAULT_MODEL, limit: int = 0,
         log("Nothing pending enrichment.")
         return 0
 
-    client = anthropic.Anthropic()
     system_prompt = build_system_prompt(lib)
-    log(f"Enriching {len(pending)} reel(s) with {model} …")
+    if engine == "api":
+        client = anthropic.Anthropic()
+        model = model or DEFAULT_MODEL
+        log(f"Enriching {len(pending)} reel(s) with {model} (API) …")
+    else:
+        client = None
+        log(f"Enriching {len(pending)} reel(s) via Claude Code"
+            f"{f' ({model})' if model else ''} — subscription auth …")
 
     entries, total_in, total_out = [], 0, 0
     for rec in pending:
         n = rec["number"]
         try:
-            result = enrich_reel(client, lib, rec, system_prompt, model=model)
-        except anthropic.AuthenticationError:
-            raise SystemExit(
-                "No valid Anthropic credential. Set ANTHROPIC_API_KEY or run `ant auth login`."
-            ) from None
-        except anthropic.RateLimitError:
-            log(f"  #{n}: rate limited — waiting 30s and retrying once")
-            time.sleep(30)
-            result = enrich_reel(client, lib, rec, system_prompt, model=model)
-        except (anthropic.APIStatusError, anthropic.APIConnectionError, RuntimeError,
-                json.JSONDecodeError, StopIteration) as e:
-            log(f"  #{n}: FAILED — {e}")
-            continue
+            if engine == "claude-cli":
+                result = enrich_reel_cli(lib, rec, system_prompt, model=model)
+            else:
+                result = enrich_reel(client, lib, rec, system_prompt, model=model)
+        except Exception as e:  # noqa: BLE001 — per-reel isolation; auth aborts below
+            if anthropic is not None and isinstance(e, anthropic.AuthenticationError):
+                raise SystemExit(
+                    "No valid Anthropic API credential. Set ANTHROPIC_API_KEY, or use "
+                    "your Claude subscription:  reelscribe enrich --engine claude-cli"
+                ) from None
+            if anthropic is not None and isinstance(e, anthropic.RateLimitError):
+                log(f"  #{n}: rate limited — waiting 30s and retrying once")
+                time.sleep(30)
+                result = enrich_reel(client, lib, rec, system_prompt, model=model)
+            else:
+                log(f"  #{n}: FAILED — {e}")
+                continue
 
-        result["_model"] = model
+        result["_model"] = model or ("claude-code-cli" if engine == "claude-cli" else DEFAULT_MODEL)
         doc_path = apply_result(lib, rec, result)
         u = result["_usage"]
         total_in += u["input_tokens"] + u["cache_read_input_tokens"]
@@ -279,5 +360,6 @@ def run_enrichment(lib: Library, model: str = DEFAULT_MODEL, limit: int = 0,
     if entries:
         report = write_report(lib, entries)
         log(f"\n{len(entries)} doc(s) finalised. Report → {report}")
-        log(f"tokens: ~{total_in} in / ~{total_out} out")
+        if total_in or total_out:
+            log(f"tokens: ~{total_in} in / ~{total_out} out")
     return len(entries)
